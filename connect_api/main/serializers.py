@@ -3,9 +3,12 @@ from rest_framework import serializers
 from .models import Order, Product, OrderDetail
 
 
-# сериализаторы для вывода
+# сериализаторы для добавления и вывода
 class ProductListSerializer(serializers.ModelSerializer):
     """Список продуктов"""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField(max_length=64, read_only=True)
 
     class Meta:
         model = Product
@@ -21,6 +24,13 @@ class OrderDetailListSerializer(serializers.ModelSerializer):
         model = OrderDetail
         fields = ("id", "product", "amount", "price")
 
+    def create(self, validated_data):
+        product_data = validated_data.pop('product', None)
+        if product_data:
+            product = Product.objects.get(**product_data)
+            validated_data['product'] = product
+        return OrderDetail.objects.create(**validated_data)
+
 
 class OrderListSerializer(serializers.ModelSerializer):
     """Список заказов"""
@@ -31,47 +41,12 @@ class OrderListSerializer(serializers.ModelSerializer):
         model = Order
         fields = ("id", "status", "created_at", "external_id", "details")
 
-
-# сериализаторы для создания нового заказа
-class ProductListCreateSerializer(serializers.ModelSerializer):
-
-    class Meta:
-        model = Product
-        fields = ("id", )
-
-
-class OrderDetailCreateSerializer(serializers.ModelSerializer):
-
-    product = ProductListCreateSerializer()
-    # order = super().create(validated_data)
-
-    class Meta:
-        model = OrderDetail
-        fields = ("order", "product", "amount", "price")
-
-    # def create(self, validated_data):
-    #     theorderid = validated_data.pop('order_id', None)
-    #     theorder = Order.objects.get(pk=theorderid)
-    #
-    #     return OrderDetail.objects.create(order=theorder, **validated_data)
-
-
-class OrderCreateSerializer(serializers.ModelSerializer):
-    """Новый заказ"""
-
-    details = OrderDetailCreateSerializer(many=True)
-
-    class Meta:
-        model = Order
-        fields = ("external_id", "details",)
-
     def create(self, validated_data):
-        # order = super().create(validated_data)
-
-        details_data = validated_data.pop('details')
-        details_model = OrderDetail.objects.create(**details_data)
-        order = OrderDetail.objects.create(order=details_model, **validated_data)
-
+        details = validated_data.pop('details', [])
+        order = Order.objects.create(**validated_data)
+        for detail_dict in details:
+            detail_dict['order'] = order
+            OrderDetailListSerializer().create(detail_dict)
         return order
 
 
